@@ -101,7 +101,7 @@ withTempDir(({ createTempDir }) => {
         const ctx = setupJourney({ createTempDir, contractMode: 'psl' });
         const schemaPath = join(ctx.testDir, 'contract.prisma');
         const uri = pathToFileURL(schemaPath).href;
-        let text = `// use prisma-next\nmodel User {\n  id Int @id\n  ${declaration}\n}`;
+        let text = `// use prisma-8\nmodel User {\n  id Int @id\n  ${declaration}\n}`;
         writeFileSync(schemaPath, text);
         copyFileSync(configPath, ctx.configPath);
         const client = pullClient();
