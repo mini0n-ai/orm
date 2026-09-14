@@ -195,5 +195,8 @@ describe('postgresServerless', () => {
     await expect(db.connect({ url: 'mysql://localhost:3306/db' })).rejects.toThrow(
       'Postgres URL must use postgres:// or postgresql://',
     );
+    await expect(db.connect({ url: 'postgresql:mydb' })).rejects.toThrow(
+      'Postgres URL must be a valid URL',
+    );
   });
 });

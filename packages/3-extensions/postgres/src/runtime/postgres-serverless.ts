@@ -101,6 +101,12 @@ function validateConnectionString(url: string): string {
     );
   }
 
+  if (!/^postgres(?:ql)?:\/\//i.test(trimmed)) {
+    throw postgresError('RUNTIME.BINDING_INVALID', 'Postgres URL must be a valid URL', {
+      meta: { extension: 'postgres', reason: 'unparseable url' },
+    });
+  }
+
   return trimmed;
 }
 
