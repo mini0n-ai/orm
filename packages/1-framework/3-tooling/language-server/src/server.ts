@@ -316,6 +316,10 @@ function createServerOn(connection: Connection): LanguageServer {
       inputs: resolution.inputs,
       controlStack: resolution.controlStack,
       getText: (uri) => documents.get(uri)?.getText(),
+      onInterpretationError: (uri, error) => {
+        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+        connection.console.error(`PSL interpretation failed for ${uri}: ${detail}`);
+      },
       ...(resolution.interpretation === undefined
         ? {}
         : { interpretation: resolution.interpretation }),

@@ -2690,6 +2690,71 @@ describe('language server interpreter diagnostics', { timeout: timeouts.database
         : notOk({ summary: 'Schema has 1 error', diagnostics: [unresolvedDiagnostic] });
   }
 
+  it('recovers from an interpreter exception on a same-version pull and logs its original stack', async () => {
+    const error = new Error('private interpreter detail');
+    const { resolveInputs, spy } = interpretationResolution(() => ok({} as never));
+    spy.mockImplementationOnce(() => {
+      throw error;
+    });
+    harness = startHarness(resolveInputs, pullDiagnosticsCapabilities);
+    const logs: string[] = [];
+    harness.client.onNotification(LogMessageNotification.type, (params) => {
+      if (params.type === MessageType.Error) logs.push(params.message);
+    });
+    await harness.initialize();
+    openDocument(harness, schemaUri, duplicateModelSource);
+    const { parseDiagnostics, symbolTableDiagnostics } =
+      parseAndSymbolTableDiagnostics(duplicateModelSource);
+    const parserItems = toPublishedDiagnostics([...parseDiagnostics, ...symbolTableDiagnostics]);
+    expect(fullReportItems(await requestPullDiagnostics(harness, schemaUri))).toEqual([
+      ...parserItems,
+      {
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+        code: 'PRISMA_NEXT_INTERPRETATION_FAILED',
+        message:
+          'Semantic diagnostics are unavailable because of an internal error. A subsequent diagnostic request or edit will retry.',
+        severity: DiagnosticSeverity.Error,
+        source: 'prisma',
+      },
+    ]);
+    expect(logs).toEqual([`PSL interpretation failed for ${schemaUri}: ${error.stack}`]);
+    expect(fullReportItems(await requestPullDiagnostics(harness, schemaUri))).toEqual(parserItems);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])('recovers diagnostics after edits for pull=%s', async (pull) => {
+    const interpret = fixAwareInterpret();
+    const { resolveInputs } = interpretationResolution((input, context) => {
+      if (input.sourceFile.text.includes('// crash')) throw new Error('interpreter failed');
+      return interpret(input, context);
+    });
+    harness = startHarness(resolveInputs, pull ? pullDiagnosticsCapabilities : {});
+    await harness.initialize();
+    openDocument(harness, schemaUri, `${cleanSchema}// crash`);
+    const failed = pull
+      ? fullReportItems(await requestPullDiagnostics(harness, schemaUri))
+      : await harness.waitForDiagnostics(schemaUri);
+    expect(failed.map((item) => item.code)).toEqual(['PRISMA_NEXT_INTERPRETATION_FAILED']);
+    harness.client.sendNotification(DidChangeTextDocumentNotification.type, {
+      textDocument: { uri: schemaUri, version: 2 },
+      contentChanges: [{ text: cleanSchema }],
+    });
+    const recovered = pull
+      ? fullReportItems(await requestPullDiagnostics(harness, schemaUri))
+      : await harness.waitForDiagnosticsMatching(schemaUri, (items) =>
+          items.some((item) => item.code === expectedUnresolved.code),
+        );
+    expect(recovered).toEqual([expectedUnresolved]);
+    harness.client.sendNotification(DidChangeTextDocumentNotification.type, {
+      textDocument: { uri: schemaUri, version: 3 },
+      contentChanges: [{ text: fixedSchema }],
+    });
+    const fixed = pull
+      ? fullReportItems(await requestPullDiagnostics(harness, schemaUri))
+      : await harness.waitForDiagnosticsMatching(schemaUri, (items) => items.length === 0);
+    expect(fixed).toEqual([]);
+  });
+
   it('pull serves the interpreter diagnostic at its mapped range and clears it after a fix', async () => {
     const { resolveInputs } = interpretationResolution(fixAwareInterpret());
     harness = startHarness(resolveInputs, pullDiagnosticsCapabilities);

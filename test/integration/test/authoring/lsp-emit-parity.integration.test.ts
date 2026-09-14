@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { timeouts } from '@repo/test-utils';
 import { join } from 'pathe';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { resolveConfigInputs } from '../../../../packages/1-framework/3-tooling/language-server/src/config-resolution';
 import { createProjectArtifacts } from '../../../../packages/1-framework/3-tooling/language-server/src/project-artifacts';
 import { startServer } from '../../../../packages/1-framework/3-tooling/language-server/src/start-server';
@@ -182,8 +182,10 @@ model Widget {
 
         const resolution = await resolveConfigInputs(ctx.configPath);
         expect(resolution.interpretation).toBeDefined();
+        const onInterpretationError = vi.fn();
         const project = createProjectArtifacts({
           ...resolution,
+          onInterpretationError,
           getText: (inputUri) => (inputUri === uri ? text : undefined),
         });
         const document = project.document(uri);
@@ -192,6 +194,7 @@ model Widget {
         expect(document?.interpretDiagnostics().map((diagnostic) => diagnostic.code)).toEqual(
           diagnosticCodes,
         );
+        expect(onInterpretationError).not.toHaveBeenCalled();
       },
       timeouts.coldTransformImport,
     );
