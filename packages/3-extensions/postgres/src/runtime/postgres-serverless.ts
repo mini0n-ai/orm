@@ -83,6 +83,24 @@ function validateConnectionString(url: string): string {
       meta: { extension: 'postgres', reason: 'empty url' },
     });
   }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw postgresError('RUNTIME.BINDING_INVALID', 'Postgres URL must be a valid URL', {
+      meta: { extension: 'postgres', reason: 'unparseable url' },
+    });
+  }
+
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw postgresError(
+      'RUNTIME.BINDING_INVALID',
+      'Postgres URL must use postgres:// or postgresql://',
+      { meta: { extension: 'postgres', reason: 'wrong scheme', received: parsed.protocol } },
+    );
+  }
+
   return trimmed;
 }
 
