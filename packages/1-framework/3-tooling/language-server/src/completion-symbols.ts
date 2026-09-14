@@ -36,11 +36,14 @@ export function localFieldNames(
 ): readonly string[] {
   switch (context.kind) {
     case 'blockAttributeNamedKey':
+    case 'blockAttributeArgumentSlot':
     case 'blockAttributeValue':
       return [];
     case 'fieldAttributeNamedKey':
+    case 'fieldAttributeArgumentSlot':
     case 'fieldAttributeValue':
     case 'modelAttributeNamedKey':
+    case 'modelAttributeArgumentSlot':
     case 'modelAttributeValue':
       return Object.keys(modelSymbolForNode(symbols, context.model)?.fields ?? {});
   }
@@ -52,11 +55,14 @@ export function referencedFieldNames(
 ): readonly string[] {
   switch (context.kind) {
     case 'blockAttributeNamedKey':
+    case 'blockAttributeArgumentSlot':
     case 'blockAttributeValue':
     case 'modelAttributeNamedKey':
+    case 'modelAttributeArgumentSlot':
     case 'modelAttributeValue':
       return [];
     case 'fieldAttributeNamedKey':
+    case 'fieldAttributeArgumentSlot':
     case 'fieldAttributeValue': {
       const model = modelSymbolForNode(symbols, context.model);
       if (model === undefined) return [];

@@ -23,11 +23,16 @@ import {
   record,
   str,
 } from '@internal/psl-parser';
-import { parse } from '@internal/psl-parser/syntax';
+import { parse, SourceFile } from '@internal/psl-parser/syntax';
 import { describe, expect, it, vi } from 'vitest';
 import { InsertTextFormat } from 'vscode-languageserver';
 import { classifyPslCompletionContext } from '../src/completion-context';
 import { providePslCompletionItems } from '../src/completion-provider';
+import {
+  provideAttributeArgumentSlotCompletionItems,
+  provideAttributeNamedKeyCompletionItems,
+  provideAttributeValueCompletionItems,
+} from '../src/completion-values';
 
 const emptyTabStop1 = '$' + '{1:}';
 const emptyTabStop2 = '$' + '{2:}';
@@ -138,6 +143,108 @@ function complete(markedSource: string, snippets = false) {
 function field(args: string, snippets = false) {
   return complete(`model Example {\n  value String @probe(${args})\n}`, snippets);
 }
+
+describe('classified positions without cursor AST', () => {
+  it('resolves all matching nested signatures using only a path and existing keys', () => {
+    const sourceFile = new SourceFile('');
+    const items = provideAttributeNamedKeyCompletionItems(
+      {
+        context: {
+          offset: 0,
+          replacementStartOffset: 0,
+          replacementEndOffset: 0,
+          attributeName: 'probe',
+          path: [
+            { kind: 'namedArgument', name: 'overlap' },
+            { kind: 'functionCall', name: 'same' },
+          ],
+          existingNamedKeys: ['first'],
+        },
+        sourceFile,
+        clientSupportsSnippets: false,
+      },
+      fieldSpec,
+    );
+    expect(items.map((item) => item.label)).toEqual(['second']);
+  });
+
+  it('offers both positional values and keys from an explicit ambiguous position', () => {
+    const items = provideAttributeArgumentSlotCompletionItems(
+      {
+        context: {
+          offset: 0,
+          replacementStartOffset: 0,
+          replacementEndOffset: 0,
+          attributeName: 'probe',
+          path: [
+            { kind: 'namedArgument', name: 'choice' },
+            { kind: 'functionCall', name: 'ordered' },
+          ],
+          existingNamedKeys: ['optional'],
+          positionalIndex: 0,
+        },
+        sourceFile: new SourceFile(''),
+        clientSupportsSnippets: false,
+        fieldNames: () => [],
+      },
+      fieldSpec,
+    );
+    expect(items.map((item) => item.label)).toEqual(['Asc', 'Desc', 'required', 'direction']);
+  });
+
+  it('preserves callee parentheses and excludes scalar alternatives without inspecting an expression', () => {
+    const spec = fieldAttribute('probe', { named: { value: oneOf(bool(), funcCall('f', {})) } });
+    const items = provideAttributeValueCompletionItems(
+      {
+        context: {
+          offset: 1,
+          replacementStartOffset: 0,
+          replacementEndOffset: 1,
+          attributeName: 'probe',
+          path: [{ kind: 'namedArgument', name: 'value' }],
+          syntax: 'functionName',
+        },
+        sourceFile: new SourceFile('f()'),
+        clientSupportsSnippets: true,
+        fieldNames: () => [],
+      },
+      spec,
+    );
+    expect(
+      items.map((item) => ({
+        label: item.label,
+        newText: item.textEdit?.newText,
+        format: item.insertTextFormat,
+      })),
+    ).toEqual([{ label: 'f', newText: 'f', format: undefined }]);
+  });
+
+  it('renders a scalar edit from the supplied span without an attribute or owner AST', () => {
+    const sourceFile = new SourceFile('old');
+    const items = provideAttributeValueCompletionItems(
+      {
+        context: {
+          offset: 1,
+          replacementStartOffset: 0,
+          replacementEndOffset: 3,
+          attributeName: 'probe',
+          path: [{ kind: 'namedArgument', name: 'mode' }],
+          syntax: 'scalar',
+        },
+        sourceFile,
+        clientSupportsSnippets: false,
+        fieldNames: () => [],
+      },
+      fieldSpec,
+    );
+    expect(items.map((item) => item.textEdit)).toEqual(
+      ['Asc', 'Desc'].map((newText) => ({
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+        newText,
+      })),
+    );
+  });
+});
 
 describe('recursive attribute values', () => {
   it.each([
